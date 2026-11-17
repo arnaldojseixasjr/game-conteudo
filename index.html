@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>O Tradutor de Regras: Desafio OutSystems</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace']
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe',
+              500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 60%, #f5f3ff 100%);
+      min-height: 100vh;
+      background-attachment: fixed;
+    }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+    .fade-in { animation: fadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .pop-in { animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.92); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    .option-card {
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+      cursor: pointer;
+      user-select: none;
+    }
+    .option-card:hover:not(.disabled) {
+      border-color: #6366f1;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.12);
+    }
+    .option-card.selected {
+      border-color: #4f46e5;
+      background: #eef2ff;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+    }
+    .option-card.correct {
+      border-color: #10b981 !important;
+      background: #ecfdf5 !important;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18) !important;
+    }
+    .option-card.wrong {
+      border-color: #f43f5e !important;
+      background: #fff1f2 !important;
+      box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.18) !important;
+    }
+    .option-card.disabled { cursor: default; }
+    .option-card.disabled:hover { transform: none; box-shadow: none; }
+
+    .progress-bar-fill { transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+
+    .code-block {
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .code-block::-webkit-scrollbar { height: 6px; }
+    .code-block::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.30);
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(79, 70, 229, 0.40);
+      filter: brightness(1.05);
+    }
+    .btn-primary:active:not(:disabled) { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+  </style>
+</head>
+<body class="text-slate-800">
+
+  <div class="max-w-3xl mx-auto px-4 py-6 sm:py-10">
+
+    <!-- ============ HEADER ============ -->
+    <header class="text-center mb-6 sm:mb-8">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-xs font-semibold mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        Atividade de Fixação · LMS
+      </div>
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent leading-tight">
+        O Tradutor de Regras
+      </h1>
+      <p class="mt-2 text-sm sm:text-base text-slate-600 font-medium">
+        Desafio OutSystems — Tipos de Dados, Sintaxe e Lógica Booleana
+      </p>
+    </header>
+
+    <!-- ============ TOP BAR (Progresso + Pontos) ============ -->
+    <div id="topBar" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 mb-5">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-brand-600 text-white text-xs font-bold" id="currentNum">1</span>
+          <span>Desafio <span id="progressLabel">1 de 10</span></span>
+        </div>
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200">
+          <svg class="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4-6.3-4.6L5.7 21.4 8 14 2 9.4h7.6z"/></svg>
+          <span class="text-sm font-bold text-amber-700"><span id="pointsDisplay">0</span> <span class="text-amber-500 font-medium">pts</span></span>
+        </div>
+      </div>
+      <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+        <div id="progressFill" class="progress-bar-fill h-full bg-gradient-to-r from-brand-500 to-violet-500 rounded-full" style="width: 10%"></div>
+      </div>
+    </div>
+
+    <!-- ============ WELCOME SCREEN ============ -->
+    <section id="welcomeScreen" class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 sm:p-8 fade-in">
+      <div class="flex items-start gap-4 mb-5">
+        <div class="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-violet-500 flex items-center justify-center text-white shadow-md">
+          <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        </div>
+        <div>
+          <h2 class="text-xl sm:text-2xl font-bold text-slate-900">Bem-vindo ao desafio!</h2>
+          <p class="text-slate-600 text-sm sm:text-base mt-1">Mostre que você domina as regras essenciais do OutSystems traduzindo cenários reais em código.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div class="text-xs font-semibold text-brand-600 uppercase tracking-wide mb-1">10 Desafios</div>
+          <div class="text-sm text-slate-700">Dificuldade progressiva do básico à regra completa.</div>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div class="text-xs font-semibold text-brand-600 uppercase tracking-wide mb-1">2 Passos cada</div>
+          <div class="text-sm text-slate-700">Escolha o Tipo de Dado e a expressão lógica correta.</div>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div class="text-xs font-semibold text-brand-600 uppercase tracking-wide mb-1">Feedback na hora</div>
+          <div class="text-sm text-slate-700">Aprenda com o erro sem frustração de digitação.</div>
+        </div>
+      </div>
+
+      <div class="rounded-xl bg-brand-50 border border-brand-100 p-4 mb-6">
+        <div class="text-xs font-bold text-brand-700 uppercase tracking-wide mb-2">O que você vai praticar</div>
+        <div class="flex flex-wrap gap-2 text-xs font-medium">
+          <span class="px-2.5 py-1 rounded-md bg-white text-slate-700 border border-slate-200">Text &amp; Aspas Duplas</span>
+          <span class="px-2.5 py-1 rounded-md bg-white text-slate-700 border border-slate-200">Integer</span>
+          <span class="px-2.5 py-1 rounded-md bg-white text-slate-700 border border-slate-200">Decimal &amp; Ponto</span>
+          <span class="px-2.5 py-1 rounded-md bg-white text-slate-700 border border-slate-200">Boolean</span>
+          <span class="px-2.5 py-1 rounded-md bg-white text-slate-700 border border-slate-200">Operador &lt;&gt;</span>
+          <span class="px-2.5 py-1 rounded-md bg-white text-slate-700 border border-slate-200">AND · OR · NOT</span>
+        </div>
+      </div>
+
+      <button id="startBtn" class="btn-primary w-full text-white font-bold py-3.5 px-6 rounded-xl text-base sm:text-lg flex items-center justify-center gap-2">
+        Começar Desafio
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </section>
+
+    <!-- ============ QUIZ SCREEN ============ -->
+    <section id="quizScreen" class="hidden">
+      <div id="challengeCard" class="bg-white rounded-2xl shadow-lg border border-slate-100 p-5 sm:p-7 fade-in">
+        <!-- conteúdo injetado via JS -->
+      </div>
+    </section>
+
+    <!-- ============ RESULTS SCREEN ============ -->
+    <section id="resultsScreen" class="hidden">
+      <div class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 sm:p-10 text-center fade-in">
+        <!-- conteúdo injetado via JS -->
+      </div>
+    </section>
+
+    <footer class="text-center text-xs text-slate-400 mt-8 px-2">
+      Atividade educacional · Tipos de Dados e Lógica Booleana no OutSystems · Feito para fins didáticos
+    </footer>
+  </div>
+
+  <script>
+    // ============ DADOS DOS 10 DESAFIOS ============
+    const DATA_TYPES = [
+      { type: "Text",    icon: "T", color: "bg-blue-500",    desc: "Sequência de caracteres" },
+      { type: "Integer", icon: "#", color: "bg-emerald-500", desc: "Número inteiro" },
+      { type: "Decimal", icon: ".", color: "bg-amber-500",   desc: "Número com decimais" },
+      { type: "Boolean", icon: "✓", color: "bg-violet-500",  desc: "Verdadeiro ou Falso" },
+      { type: "Date",    icon: "◷", color: "bg-rose-500",    desc: "Data e/ou hora" }
+    ];
+
+    const challenges = [
+      {
+        id: 1,
+        difficulty: "Básico",
+        topic: "Text e Aspas Duplas",
+        scenario: "Você está desenvolvendo um sistema de delivery. Precisa verificar se o nome da cidade de entrega digitado pelo usuário é exatamente São Paulo.",
+        dataType: "Text",
+        expressions: [
+          'Cidade = São Paulo',
+          'Cidade = "São Paulo"',
+          "Cidade = 'São Paulo'",
+          'Cidade == "São Paulo"'
+        ],
+        correctExpression: 'Cidade = "São Paulo"',
+        explanation: "No OutSystems, todo texto fixo (literal) precisa estar entre ASPAS DUPLAS. Sem aspas, o sistema acha que \"São Paulo\" é uma variável. Aspas simples não são usadas para texto. E o operador de igualdade é = (um único igual), não == como em JavaScript/Python."
+      },
+      {
+        id: 2,
+        difficulty: "Básico",
+        topic: "Integer e Operador >=",
+        scenario: "Em um e-commerce, valide se a quantidade de itens no carrinho é maior ou igual a 1 antes de liberar o checkout.",
+        dataType: "Integer",
+        expressions: [
+          'Quantidade >= 1',
+          'Quantidade > 1',
+          'Quantidade = > 1',
+          'Quantidade >= 1.0'
+        ],
+        correctExpression: 'Quantidade >= 1',
+        explanation: "Quantidade de itens é um número inteiro (sem casas decimais), por isso o tipo é Integer. O operador >= (maior ou igual) inclui o caso de exatamente 1 item. A opção > 1 excluiria o cliente com 1 item. Escrever = > com espaço é um erro de sintaxe. E 1.0 seria um valor Decimal, não Integer."
+      },
+      {
+        id: 3,
+        difficulty: "Básico",
+        topic: "Decimal e Ponto",
+        scenario: "No cálculo de frete de uma loja virtual, você precisa checar se o valor do frete é menor que R$ 25,50 para liberar frete grátis.",
+        dataType: "Decimal",
+        expressions: [
+          'Frete < 25.50',
+          'Frete < 25,50',
+          'Frete < "25.50"',
+          'Frete <= 25.50'
+        ],
+        correctExpression: 'Frete < 25.50',
+        explanation: "Valores com casas decimais (como dinheiro) usam PONTO (.) como separador decimal, nunca vírgula. A vírgula no OutSystems é usada para separar parâmetros de função, gerando erro. Como é um valor numérico, o tipo é Decimal e o número não vai entre aspas — \"25.50\" seria texto. O operador < é estrito; <= incluiria o valor exato 25,50, mas o cenário pede \"menor que\"."
+      },
+      {
+        id: 4,
+        difficulty: "Básico",
+        topic: "Boolean e True",
+        scenario: "Em um formulário de cadastro, verifique se o cliente aceitou os termos de uso antes de permitir o prosseguimento.",
+        dataType: "Boolean",
+        expressions: [
+          'AceitouTermos = True',
+          'AceitouTermos = "True"',
+          'AceitouTermos = true',
+          'AceitouTermos == True'
+        ],
+        correctExpression: 'AceitouTermos = True',
+        explanation: "Variáveis de aceite/consentimento são Boolean (True ou False). No OutSystems, os valores literais são True e False com inicial MAIÚSCULA. Escrever true (minúsculo) não é reconhecido. Colocar \"True\" entre aspas o transforma em texto, não em booleano. E o operador de igualdade do OutSystems é =, não ==."
+      },
+      {
+        id: 5,
+        difficulty: "Básico",
+        topic: "Operador de Diferença <>",
+        scenario: "Em uma tela de login, garanta que o campo de e-mail não esteja vazio antes de tentar validar o acesso do usuário.",
+        dataType: "Text",
+        expressions: [
+          'Email <> ""',
+          'Email != ""',
+          'Email = ""',
+          "Email <> ''"
+        ],
+        correctExpression: 'Email <> ""',
+        explanation: "Para verificar DIFERENÇA no OutSystems, usamos o operador <>, nunca != (que é de linguagens como JavaScript/Java). Um texto vazio é representado por aspas duplas sem conteúdo (\"\"). A opção Email = \"\" verifica o contrário (que está vazio). Aspas simples não são usadas para literais de texto no OutSystems."
+      },
+      {
+        id: 6,
+        difficulty: "Intermediário",
+        topic: "Operador AND",
+        scenario: "No controle de acesso de um evento, libere a entrada apenas se a idade do participante for maior ou igual a 18 E o ingresso estiver pago (True).",
+        dataType: "Boolean",
+        expressions: [
+          'Idade >= 18 AND IngressoPago = True',
+          'Idade >= 18 OR IngressoPago = True',
+          'Idade >= 18 AND IngressoPago = "True"',
+          'Idade > 18 AND IngressoPago = True'
+        ],
+        correctExpression: 'Idade >= 18 AND IngressoPago = True',
+        explanation: "O operador AND exige que AMBAS as condições sejam verdadeiras ao mesmo tempo — exatamente o que o cenário pede (idade mínima E ingresso pago). OR seria satisfeito com apenas uma, deixando entrar quem tem só um dos requisitos. IngressoPago é Boolean, então True sem aspas. E >= 18 inclui quem tem exatamente 18 anos; > 18 os excluiria."
+      },
+      {
+        id: 7,
+        difficulty: "Intermediário",
+        topic: "Operador OR",
+        scenario: "Em um programa de fidelidade, conceda desconto se o cliente for VIP OU se o valor da compra for maior que R$ 500,00.",
+        dataType: "Boolean",
+        expressions: [
+          'Cliente = "VIP" OR ValorCompra > 500.00',
+          'Cliente = VIP OR ValorCompra > 500.00',
+          'Cliente = "VIP" AND ValorCompra > 500.00',
+          'Cliente = "VIP" OR ValorCompra > 500,00'
+        ],
+        correctExpression: 'Cliente = "VIP" OR ValorCompra > 500.00',
+        explanation: "OR precisa que apenas UMA das condições seja verdadeira — basta ser VIP OU ter comprado mais de R$ 500. \"VIP\" é um texto fixo, então exige aspas duplas; sem elas o sistema interpretaria VIP como variável. AND exigiria as duas condições juntas. E o valor 500.00 usa ponto decimal (Decimal); 500,00 com vírgula é erro de sintaxe."
+      },
+      {
+        id: 8,
+        difficulty: "Intermediário",
+        topic: "Operador NOT",
+        scenario: "Em um painel administrativo, permita o acesso apenas se o usuário NÃO estiver bloqueado no sistema.",
+        dataType: "Boolean",
+        expressions: [
+          'NOT(Bloqueado)',
+          '!Bloqueado',
+          'NOT Bloqueado',
+          'Bloqueado = False'
+        ],
+        correctExpression: 'NOT(Bloqueado)',
+        explanation: "NOT(...) inverte o valor booleano: se Bloqueado = True, então NOT(Bloqueado) = False (ou seja, o usuário está liberado). No OutSystems a sintaxe exige os PARÊNTESES: NOT(Bloqueado). A opção !Bloqueado é de linguagens como JavaScript/C. Escrever NOT sem parênteses não compila no OutSystems. Observação: Bloqueado = False também seria logicamente equivalente, mas a forma idiomática do cenário \"NÃO está bloqueado\" é NOT(Bloqueado)."
+      },
+      {
+        id: 9,
+        difficulty: "Intermediário",
+        topic: "Combinação Boolean + Decimal",
+        scenario: "No catálogo de produtos, valide um produto ativo que esteja em estoque (EmEstoque = True) e tenha preço diferente de zero (Preco <> 0.0).",
+        dataType: "Boolean",
+        expressions: [
+          'EmEstoque = True AND Preco <> 0.0',
+          'EmEstoque = True OR Preco <> 0.0',
+          'EmEstoque = "True" AND Preco <> 0.0',
+          'EmEstoque = True AND Preco <> 0,0'
+        ],
+        correctExpression: 'EmEstoque = True AND Preco <> 0.0',
+        explanation: "Combinamos uma condição Boolean (EmEstoque = True) com uma Decimal (Preco <> 0.0) usando AND: ambas precisam ser verdadeiras. OR seria satisfeito com apenas uma, liberando produto sem estoque ou sem preço. True é booleano, sem aspas. E 0.0 usa PONTO decimal; 0,0 com vírgula é erro de sintaxe."
+      },
+      {
+        id: 10,
+        difficulty: "Desafio Final",
+        topic: "Regra Completa: Text + Integer + AND + NOT",
+        scenario: "No sistema de pedidos, aprove um pedido apenas se: o status for igual a \"Pendente\", a quantidade for maior que 0 E o cliente NÃO estiver inadimplente.",
+        dataType: "Boolean",
+        expressions: [
+          'Status = "Pendente" AND Quantidade > 0 AND NOT(Inadimplente)',
+          'Status = Pendente AND Quantidade > 0 AND NOT(Inadimplente)',
+          'Status = "Pendente" OR Quantidade > 0 AND NOT(Inadimplente)',
+          'Status = "Pendente" AND Quantidade > 0 AND NOT Inadimplente'
+        ],
+        correctExpression: 'Status = "Pendente" AND Quantidade > 0 AND NOT(Inadimplente)',
+        explanation: "A regra completa junta tudo: \"Pendente\" é texto fixo (precisa de aspas duplas), Quantidade > 0 é Integer e NOT(Inadimplente) é Boolean. Todas as condições são obrigatórias, por isso usamos AND entre elas. Sem aspas em Pendente, o sistema acharia que é uma variável. OR tornaria a regra fraca (aprovando com status errado). E NOT sem parênteses não compila no OutSystems."
+      }
+    ];
+
+    // ============ ESTADO ============
+    let currentIndex = 0;
+    let points = 0;
+    let correctCount = 0;
+    let answeredThisChallenge = false;
+    let stepASelection = null;
+    let stepBSelection = null;
+
+    // ============ ELEMENTOS ============
+    const welcomeScreen = document.getElementById('welcomeScreen');
+    const quizScreen    = document.getElementById('quizScreen');
+    const resultsScreen = document.getElementById('resultsScreen');
+    const topBar        = document.getElementById('topBar');
+    const challengeCard = document.getElementById('challengeCard');
+
+    // ============ RANKINGS ============
+    function getRank(score) {
+      if (score === 10) return { title: "Mestre OutSystems", emoji: "🏆", color: "from-amber-400 to-yellow-500", msg: "Perfeito! Você domina tipos de dados, sintaxe e lógica booleana como ninguém." };
+      if (score === 9)  return { title: "Arquiteto Júnior de Dados", emoji: "🎓", color: "from-brand-500 to-violet-500", msg: "Excelente! Só um detalhe escapou — releia a explicação e você será imbatível." };
+      if (score >= 7)   return { title: "Desenvolvedor em Treinamento", emoji: "🚀", color: "from-brand-500 to-violet-500", msg: "Muito bom! Você já traduz regras com confiança. Revise aspas e operadores." };
+      if (score >= 4)   return { title: "Aprendiz de Lógica", emoji: "🧩", color: "from-sky-500 to-cyan-500", msg: "Bom progresso! Vale reforçar aspas duplas, ponto decimal e a diferença entre AND/OR." };
+      return { title: "Estagiário Curioso", emoji: "🌱", color: "from-emerald-500 to-teal-500", msg: "Começo promissor! Refaça o desafio prestando atenção nas pegadinhas clássicas." };
+    }
+
+    // ============ HELPERS DE RENDER ============
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function difficultyBadge(diff) {
+      const styles = {
+        "Básico":        "bg-emerald-100 text-emerald-700 border-emerald-200",
+        "Intermediário": "bg-amber-100 text-amber-700 border-amber-200",
+        "Desafio Final": "bg-rose-100 text-rose-700 border-rose-200"
+      };
+      return styles[diff] || "bg-slate-100 text-slate-700 border-slate-200";
+    }
+
+    // ============ RENDERIZAÇÃO DO DESAFIO ============
+    function renderChallenge() {
+      const ch = challenges[currentIndex];
+      stepASelection = null;
+      stepBSelection = null;
+      answeredThisChallenge = false;
+
+      // Top bar
+      document.getElementById('currentNum').textContent = ch.id;
+      document.getElementById('progressLabel').textContent = `${ch.id} de 10`;
+      const pct = (ch.id / 10) * 100;
+      document.getElementById('progressFill').style.width = pct + '%';
+
+      // Card
+      challengeCard.classList.remove('fade-in');
+      void challengeCard.offsetWidth; // reflow p/ re-animar
+      challengeCard.classList.add('fade-in');
+
+      const typesHtml = DATA_TYPES.map(dt => `
+        <button type="button"
+          data-type="${dt.type}"
+          class="option-card type-btn group flex flex-col items-center gap-2 p-3 sm:p-4 rounded-xl border-2 border-slate-200 bg-white text-center">
+          <span class="w-10 h-10 rounded-full ${dt.color} text-white flex items-center justify-center text-base font-bold shadow-sm">${dt.icon}</span>
+          <span class="text-sm font-bold text-slate-800">${dt.type}</span>
+          <span class="text-[11px] text-slate-500 leading-tight">${dt.desc}</span>
+        </button>
+      `).join('');
+
+      const exprHtml = ch.expressions.map((expr, i) => `
+        <button type="button"
+          data-idx="${i}"
+          class="option-card expr-btn w-full text-left flex items-center gap-3 p-3.5 sm:p-4 rounded-xl border-2 border-slate-200 bg-white">
+          <span class="shrink-0 w-7 h-7 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold">${String.fromCharCode(65 + i)}</span>
+          <code class="mono text-sm sm:text-[15px] text-slate-800 font-medium code-block whitespace-nowrap">${escapeHtml(expr)}</code>
+        </button>
+      `).join('');
+
+      challengeCard.innerHTML = `
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <span class="px-2.5 py-1 rounded-md text-xs font-bold border ${difficultyBadge(ch.difficulty)}">${ch.difficulty}</span>
+        </div>
+
+        <div class="mb-5">
+          <div class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Cenário de negócio</div>
+          <p class="text-slate-800 text-[15px] sm:text-base leading-relaxed">${escapeHtml(ch.scenario)}</p>
+        </div>
+
+        <!-- PASSO A -->
+        <div class="mb-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="shrink-0 w-6 h-6 rounded-md bg-brand-600 text-white text-xs font-bold flex items-center justify-center">A</span>
+            <h3 class="text-sm sm:text-base font-bold text-slate-800">Qual o Tipo de Dado correto para a regra?</h3>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+            ${typesHtml}
+          </div>
+        </div>
+
+        <!-- PASSO B -->
+        <div class="mb-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="shrink-0 w-6 h-6 rounded-md bg-brand-600 text-white text-xs font-bold flex items-center justify-center">B</span>
+            <h3 class="text-sm sm:text-base font-bold text-slate-800">Qual a expressão OutSystems correta?</h3>
+          </div>
+          <div class="flex flex-col gap-2.5">
+            ${exprHtml}
+          </div>
+        </div>
+
+        <!-- BOTÃO VERIFICAR -->
+        <button id="verifyBtn" disabled
+          class="btn-primary w-full text-white font-bold py-3 px-6 rounded-xl text-base flex items-center justify-center gap-2">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          Verificar Resposta
+        </button>
+
+        <!-- FEEDBACK -->
+        <div id="feedbackBox" class="hidden mt-4"></div>
+      `;
+
+      // Listeners Passo A
+      challengeCard.querySelectorAll('.type-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (answeredThisChallenge) return;
+          challengeCard.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          stepASelection = btn.dataset.type;
+          updateVerifyBtn();
+        });
+      });
+
+      // Listeners Passo B
+      challengeCard.querySelectorAll('.expr-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (answeredThisChallenge) return;
+          challengeCard.querySelectorAll('.expr-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          stepBSelection = btn.dataset.idx;
+          updateVerifyBtn();
+        });
+      });
+
+      document.getElementById('verifyBtn').addEventListener('click', verifyAnswer);
+    }
+
+    function updateVerifyBtn() {
+      const btn = document.getElementById('verifyBtn');
+      btn.disabled = !(stepASelection !== null && stepBSelection !== null);
+    }
+
+    // ============ VERIFICAR RESPOSTA ============
+    function verifyAnswer() {
+      if (answeredThisChallenge) return;
+      if (stepASelection === null || stepBSelection === null) return;
+      answeredThisChallenge = true;
+
+      const ch = challenges[currentIndex];
+      const aCorrect = stepASelection === ch.dataType;
+      const bCorrect = ch.expressions[parseInt(stepBSelection)] === ch.correctExpression;
+      const bothCorrect = aCorrect && bCorrect;
+
+      // Desabilitar todas as opções
+      challengeCard.querySelectorAll('.option-card').forEach(o => o.classList.add('disabled'));
+
+      // Destacar correto/errado no Passo A
+      challengeCard.querySelectorAll('.type-btn').forEach(btn => {
+        if (btn.dataset.type === ch.dataType) {
+          btn.classList.add('correct');
+        } else if (btn.dataset.type === stepASelection && !aCorrect) {
+          btn.classList.add('wrong');
+        }
+      });
+
+      // Destacar correto/errado no Passo B
+      challengeCard.querySelectorAll('.expr-btn').forEach(btn => {
+        const expr = ch.expressions[parseInt(btn.dataset.idx)];
+        if (expr === ch.correctExpression) {
+          btn.classList.add('correct');
+        } else if (btn.dataset.idx === stepBSelection && !bCorrect) {
+          btn.classList.add('wrong');
+        }
+      });
+
+      // Pontuação: 5 pts por passo correto (máx 10 por desafio)
+      const earned = (aCorrect ? 5 : 0) + (bCorrect ? 5 : 0);
+      points += earned;
+      if (bothCorrect) correctCount += 1;
+
+      // Atualiza display de pontos
+      animatePoints(points);
+
+      // Feedback
+      const fb = document.getElementById('feedbackBox');
+      fb.classList.remove('hidden');
+      fb.classList.add('pop-in');
+
+      let statusText, statusColor, statusBg, statusBorder, iconSvg;
+      if (bothCorrect) {
+        statusText = "Resposta perfeita!";
+        statusColor = "text-emerald-700"; statusBg = "bg-emerald-50"; statusBorder = "border-emerald-200";
+        iconSvg = '<svg class="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>';
+      } else if (aCorrect || bCorrect) {
+        statusText = "Quase lá! Você acertou uma das duas partes.";
+        statusColor = "text-amber-700"; statusBg = "bg-amber-50"; statusBorder = "border-amber-200";
+        iconSvg = '<svg class="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>';
+      } else {
+        statusText = "Ops! Veja a explicação e tente na próxima.";
+        statusColor = "text-rose-700"; statusBg = "bg-rose-50"; statusBorder = "border-rose-200";
+        iconSvg = '<svg class="w-5 h-5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>';
+      }
+
+      const stepLine = (label, ok) => `
+        <span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${ok ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+          ${ok ? '✓' : '✗'} ${label}
+        </span>`;
+
+      const isLast = currentIndex === challenges.length - 1;
+      const nextLabel = isLast ? 'Ver Resultado Final' : 'Próximo Desafio';
+      const nextIcon = isLast
+        ? '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>'
+        : '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+
+      fb.innerHTML = `
+        <div class="rounded-xl border ${statusBorder} ${statusBg} p-4 sm:p-5">
+          <div class="flex items-center gap-2 mb-3">
+            ${iconSvg}
+            <span class="font-bold ${statusColor}">${statusText}</span>
+            <span class="ml-auto text-sm font-bold text-slate-700">+${earned} pts</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5 mb-3">
+            ${stepLine('Passo A (Tipo)', aCorrect)}
+            ${stepLine('Passo B (Expressão)', bCorrect)}
+          </div>
+          <div class="rounded-lg bg-white border border-slate-200 p-3.5">
+            <div class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-1.5">Explicação</div>
+            <p class="text-sm text-slate-700 leading-relaxed">${escapeHtml(ch.explanation)}</p>
+          </div>
+          <button id="nextBtn" class="btn-primary w-full mt-4 text-white font-bold py-3 px-6 rounded-xl text-base flex items-center justify-center gap-2">
+            ${nextLabel} ${nextIcon}
+          </button>
+        </div>
+      `;
+
+      document.getElementById('nextBtn').addEventListener('click', () => {
+        if (isLast) {
+          showResults();
+        } else {
+          currentIndex += 1;
+          renderChallenge();
+        }
+      });
+
+      // Rolar até o feedback
+      setTimeout(() => fb.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+    }
+
+    // ============ ANIMAÇÃO DE PONTOS ============
+    function animatePoints(target) {
+      const el = document.getElementById('pointsDisplay');
+      const start = parseInt(el.textContent) || 0;
+      const duration = 500;
+      const startTime = performance.now();
+      function step(now) {
+        const t = Math.min(1, (now - startTime) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const val = Math.round(start + (target - start) * eased);
+        el.textContent = val;
+        if (t < 1) requestAnimationFrame(step);
+        else el.textContent = target;
+      }
+      requestAnimationFrame(step);
+    }
+
+    // ============ TELA DE RESULTADOS ============
+    function showResults() {
+      quizScreen.classList.add('hidden');
+      topBar.classList.add('hidden');
+      resultsScreen.classList.remove('hidden');
+
+      const rank = getRank(correctCount);
+      const pctPts = points; // 0 a 100
+
+      const resultsBox = resultsScreen.querySelector('div');
+      resultsBox.classList.remove('fade-in');
+      void resultsBox.offsetWidth;
+      resultsBox.classList.add('fade-in');
+
+      // Barras de resumo por desafio (acerto/erro)
+      const summaryHtml = challenges.map((ch, i) => {
+        // não guardamos histórico individual — exibimos apenas se correto no count? 
+        // Mantemos simples: mostramos barras neutras com cor baseada em número total
+        return ''; // placeholder — substituído abaixo
+      }).join('');
+
+      resultsBox.innerHTML = `
+        <div class="mx-auto w-24 h-24 rounded-full bg-gradient-to-br ${rank.color} flex items-center justify-center text-5xl shadow-lg mb-4 pop-in">
+          ${rank.emoji}
+        </div>
+        <div class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Desafio concluído</div>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-1">${rank.title}</h2>
+        <p class="text-slate-600 text-sm sm:text-base max-w-md mx-auto mb-6">${rank.msg}</p>
+
+        <div class="grid grid-cols-2 gap-3 max-w-md mx-auto mb-6">
+          <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Desafios acertados</div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-brand-600">${correctCount}<span class="text-base text-slate-400 font-bold">/10</span></div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Pontuação total</div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-amber-600">${points}<span class="text-base text-slate-400 font-bold">/100</span></div>
+          </div>
+        </div>
+
+        <div class="w-full max-w-md mx-auto h-3 bg-slate-100 rounded-full overflow-hidden mb-6">
+          <div class="h-full bg-gradient-to-r ${rank.color} rounded-full progress-bar-fill" style="width: ${points}%"></div>
+        </div>
+
+        <button id="restartBtn" class="btn-primary text-white font-bold py-3.5 px-8 rounded-xl text-base sm:text-lg flex items-center justify-center gap-2 mx-auto">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Refazer Desafio
+        </button>
+
+        <p class="text-xs text-slate-400 mt-4">Dica: releia as pegadinhas clássicas — aspas duplas em textos, ponto em decimais e a diferença entre AND / OR.</p>
+      `;
+
+      document.getElementById('restartBtn').addEventListener('click', restart);
+    }
+
+    // ============ REINICIAR ============
+    function restart() {
+      currentIndex = 0;
+      points = 0;
+      correctCount = 0;
+      answeredThisChallenge = false;
+      stepASelection = null;
+      stepBSelection = null;
+      document.getElementById('pointsDisplay').textContent = '0';
+      resultsScreen.classList.add('hidden');
+      quizScreen.classList.remove('hidden');
+      topBar.classList.remove('hidden');
+      renderChallenge();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ============ INICIAR ============
+    document.getElementById('startBtn').addEventListener('click', () => {
+      welcomeScreen.classList.add('hidden');
+      quizScreen.classList.remove('hidden');
+      topBar.classList.remove('hidden');
+      renderChallenge();
+    });
+  </script>
+</body>
+</html>
